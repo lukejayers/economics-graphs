@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Theory Matrix Analyzer</title>
+<style>
+    :root {
+        --p1-color: #012169;
+        --p2-color: #d9534f;
+        --nash-bg: #d4edda;
+        --nash-border: #28a745;
+        --bg-color: #f4f4f9;
+        --sidebar-bg: #ffffff;
+        --border-color: #ddd;
+    }
+    body, html {
+        margin: 0; padding: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif;
+        display: flex; background: var(--bg-color); color: #333; overflow: hidden;
+    }
+    .sidebar {
+        width: 320px; min-width: 320px; background: var(--sidebar-bg); border-right: 1px solid var(--border-color);
+        padding: 20px; overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px;
+    }
+    .main {
+        flex-grow: 1; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; overflow: auto;
+    }
+    h2, h3 { margin: 0 0 10px 0; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+    .control-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; }
+    .control-row { display: flex; justify-content: space-between; align-items: center; }
+    input[type="number"], input[type="text"] { width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
+    input[type="text"].name-input { width: 100%; box-sizing: border-box; margin-bottom: 5px; }
+    button { padding: 8px 12px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 5px; }
+    button:hover { background: #004494; }
+    button.solve-btn { background: #28a745; font-size: 1.1em; padding: 12px; }
+    button.solve-btn:hover { background: #218838; }
+    
+    table.matrix-table { border-collapse: collapse; margin-top: 20px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    th, td { border: 1px solid var(--border-color); padding: 10px; text-align: center; }
+    th { background: #f9f9f9; }
+    
+    .p1-header { color: var(--p1-color); font-weight: bold; }
+    .p2-header { color: var(--p2-color); font-weight: bold; }
+    
+    .payoff-cell { display: flex; justify-content: center; align-items: center; gap: 5px; min-width: 120px; padding: 10px; border-radius: 4px; transition: background 0.3s; }
+    .payoff-input { width: 45px !important; text-align: center; font-weight: bold; }
+    .p1-input { color: var(--p1-color); border: 1px solid #b3c6ff; }
+    .p2-input { color: var(--p2-color); border: 1px solid #ffb3b3; }
+    
+    .best-response-p1 { background-color: #e6f0ff; outline: 2px solid var(--p1-color); }
+    .best-response-p2 { background-color: #ffe6e6; outline: 2px solid var(--p2-color); }
+    .nash-equilibrium { background-color: var(--nash-bg) !important; outline: 3px solid var(--nash-border) !important; }
+
+    .legend { display: flex; gap: 15px; margin-bottom: 15px; font-size: 0.9em; font-weight: bold; }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .box { width: 15px; height: 15px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="control-group">
+        <h3>1. Participants</h3>
+        <label class="p1-header">Player 1 (Rows)</label>
+        <input type="text" id="p1Name" class="name-input" value="Firm A">
+        <label class="p2-header">Player 2 (Columns)</label>
+        <input type="text" id="p2Name" class="name-input" value="Firm B">
+    </div>
+
+    <div class="control-group">
+        <h3>2. Matrix Dimensions</h3>
+        <div class="control-row">
+            <label class="p1-header">P1 Strategies:</label> 
+            <input type="number" id="p1Count" min="2" max="10" value="2">
+        </div>
+        <div class="control-row">
+            <label class="p2-header">P2 Strategies:</label> 
+            <input type="number" id="p2Count" min="2" max="10" value="2">
+        </div>
+        <button id="btnBuild" style="background: #6c757d;">Rebuild Matrix</button>
+    </div>
+
+    <div class="control-group">
+        <h3>3. Analysis</h3>
+        <button id="btnSolve" class="solve-btn">Solve for Nash Equilibrium</button>
+        <button id="btnClear" style="background: #dc3545;">Clear Highlighting</button>
+    </div>
+
+    <div class="control-group">
+        <h3>Results</h3>
+        <div id="resultsText" style="font-size: 0.9em; min-height: 50px;">Awaiting analysis...</div>
+    </div>
+</div>
+
+<div class="main">
+    <h2>Game Theory Analysis Matrix</h2>
+    <div class="legend">
+        <div class="legend-item"><div class="box" style="background: #e6f0ff; border: 2px solid var(--p1-color);"></div> P1 Best Response</div>
+        <div class="legend-item"><div class="box" style="background: #ffe6e6; border: 2px solid var(--p2-color);"></div> P2 Best Response</div>
+        <div class="legend-item"><div class="box" style="background: var(--nash-bg); border: 3px solid var(--nash-border);"></div> Nash Equilibrium</div>
+    </div>
+    <div id="matrixContainer"></div>
+</div>
+
+<script>
+    const els = {
+        p1Name: document.getElementById('p1Name'),
+        p2Name: document.getElementById('p2Name'),
+        p1Count: document.getElementById('p1Count'),
+        p2Count: document.getElementById('p2Count'),
+        container: document.getElementById('matrixContainer'),
+        resultsText: document.getElementById('resultsText')
+    };
+
+    function buildMatrix() {
+        const rows = Math.min(10, Math.max(2, parseInt(els.p1Count.value) || 2));
+        const cols = Math.min(10, Math.max(2, parseInt(els.p2Count.value) || 2));
+        
+        let html = '<table class="matrix-table">';
+        
+        // Header Row (P2 Name)
+        html += `<tr><th colspan="2" rowspan="2" style="border:none; background:white;"></th><th colspan="${cols}" class="p2-header" id="headerP2">${els.p2Name.value}</th></tr>`;
+        
+        // Sub-Header Row (P2 Strategies)
+        html += '<tr>';
+        for (let j = 0; j < cols; j++) {
+            html += `<th><input type="text" id="s2_${j}" value="Strategy ${j+1}" class="name-input" style="width: 100px; text-align: center;"></th>`;
+        }
+        html += '</tr>';
+
+        // Data Rows
+        for (let i = 0; i < rows; i++) {
+            html += '<tr>';
+            if (i === 0) {
+                html += `<th rowspan="${rows}" class="p1-header" id="headerP1" style="writing-mode: vertical-rl; transform: rotate(180deg);">${els.p1Name.value}</th>`;
+            }
+            html += `<th><input type="text" id="s1_${i}" value="Strategy ${i+1}" class="name-input" style="width: 100px; text-align: center;"></th>`;
+            
+            for (let j = 0; j < cols; j++) {
+                html += `<td>
+                    <div class="payoff-cell" id="cell_${i}_${j}">
+                        <input type="number" id="p1_${i}_${j}" class="payoff-input p1-input" value="0">
+                        <span>,</span>
+                        <input type="number" id="p2_${i}_${j}" class="payoff-input p2-input" value="0">
+                    </div>
+                </td>`;
+            }
+            html += '</tr>';
+        }
+        html += '</table>';
+        els.container.innerHTML = html;
+
+        // Sync names live
+        els.p1Name.addEventListener('input', () => { document.getElementById('headerP1').textContent = els.p1Name.value; });
+        els.p2Name.addEventListener('input', () => { document.getElementById('headerP2').textContent = els.p2Name.value; });
+    }
+
+    function clearHighlighting() {
+        document.querySelectorAll('.payoff-cell').forEach(cell => {
+            cell.className = 'payoff-cell';
+        });
+        document.querySelectorAll('.payoff-input').forEach(input => {
+            input.style.fontWeight = 'normal';
+        });
+        els.resultsText.innerHTML = 'Awaiting analysis...';
+    }
+
+    function solveMatrix() {
+        clearHighlighting();
+        const rows = parseInt(els.p1Count.value);
+        const cols = parseInt(els.p2Count.value);
+        
+        // Parse grid data
+        let payoffs = [];
+        for (let i = 0; i < rows; i++) {
+            payoffs[i] = [];
+            for (let j = 0; j < cols; j++) {
+                payoffs[i][j] = {
+                    p1: parseFloat(document.getElementById(`p1_${i}_${j}`).value) || 0,
+                    p2: parseFloat(document.getElementById(`p2_${i}_${j}`).value) || 0,
+                    isP1Best: false,
+                    isP2Best: false
+                };
+            }
+        }
+
+        // Find P1 Best Responses (compare across rows for each column)
+        for (let j = 0; j < cols; j++) {
+            let maxVal = -Infinity;
+            for (let i = 0; i < rows; i++) { if (payoffs[i][j].p1 > maxVal) maxVal = payoffs[i][j].p1; }
+            for (let i = 0; i < rows; i++) {
+                if (payoffs[i][j].p1 === maxVal) payoffs[i][j].isP1Best = true;
+            }
+        }
+
+        // Find P2 Best Responses (compare across columns for each row)
+        for (let i = 0; i < rows; i++) {
+            let maxVal = -Infinity;
+            for (let j = 0; j < cols; j++) { if (payoffs[i][j].p2 > maxVal) maxVal = payoffs[i][j].p2; }
+            for (let j = 0; j < cols; j++) {
+                if (payoffs[i][j].p2 === maxVal) payoffs[i][j].isP2Best = true;
+            }
+        }
+
+        // Apply highlighting and collect results
+        let nashCount = 0;
+        let p1Dominant = findDominantStrategy(payoffs, rows, cols, 1);
+        let p2Dominant = findDominantStrategy(payoffs, rows, cols, 2);
+
+        for (let i = 0; i < rows; i++) {
+            for (let j = 0; j < cols; j++) {
+                const cell = document.getElementById(`cell_${i}_${j}`);
+                const p1Input = document.getElementById(`p1_${i}_${j}`);
+                const p2Input = document.getElementById(`p2_${i}_${j}`);
+
+                if (payoffs[i][j].isP1Best) {
+                    cell.classList.add('best-response-p1');
+                    p1Input.style.fontWeight = '900';
+                }
+                if (payoffs[i][j].isP2Best) {
+                    if (cell.classList.contains('best-response-p1')) {
+                        cell.classList.remove('best-response-p1');
+                    } else {
+                        cell.classList.add('best-response-p2');
+                    }
+                    p2Input.style.fontWeight = '900';
+                }
+                
+                if (payoffs[i][j].isP1Best && payoffs[i][j].isP2Best) {
+                    cell.classList.add('nash-equilibrium');
+                    nashCount++;
+                }
+            }
+        }
+
+        // Format Results Output
+        let resHTML = `<strong>Nash Equilibria:</strong> ${nashCount}<br><br>`;
+        
+        resHTML += `<strong>${els.p1Name.value} Dominant Strategy:</strong><br>`;
+        resHTML += p1Dominant !== null ? `<span style="color:var(--p1-color)">${document.getElementById(`s1_${p1Dominant}`).value}</span>` : 'None<br>';
+        
+        resHTML += `<br><br><strong>${els.p2Name.value} Dominant Strategy:</strong><br>`;
+        resHTML += p2Dominant !== null ? `<span style="color:var(--p2-color)">${document.getElementById(`s2_${p2Dominant}`).value}</span>` : 'None';
+
+        els.resultsText.innerHTML = resHTML;
+    }
+
+    function findDominantStrategy(payoffs, rows, cols, player) {
+        if (player === 1) {
+            for (let i = 0; i < rows; i++) {
+                let isDominant = true;
+                for (let j = 0; j < cols; j++) {
+                    if (!payoffs[i][j].isP1Best) { isDominant = false; break; }
+                }
+                if (isDominant) return i;
+            }
+        } else {
+            for (let j = 0; j < cols; j++) {
+                let isDominant = true;
+                for (let i = 0; i < rows; i++) {
+                    if (!payoffs[i][j].isP2Best) { isDominant = false; break; }
+                }
+                if (isDominant) return j;
+            }
+        }
+        return null;
+    }
+
+    document.getElementById('btnBuild').addEventListener('click', buildMatrix);
+    document.getElementById('btnSolve').addEventListener('click', solveMatrix);
+    document.getElementById('btnClear').addEventListener('click', clearHighlighting);
+
+    // Initial build
+    buildMatrix();
+</script>
+</body>
+</html>

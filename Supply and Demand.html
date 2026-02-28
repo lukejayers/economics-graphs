@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Economics Market Analysis Tool</title>
+<style>
+    :root {
+        --demand-color: #012169;
+        --supply-color: #A89968;
+        --dash-color: #A4AFB9;
+        --tr-color: #ADD8E6;
+        --dwl-color: #D3D3D3;
+        --bg-color: #f4f4f9;
+        --sidebar-bg: #ffffff;
+        --border-color: #ddd;
+    }
+    body, html {
+        margin: 0; padding: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif;
+        display: flex; background: var(--bg-color); color: #333; overflow: hidden;
+    }
+    .sidebar {
+        width: 320px; min-width: 320px; background: var(--sidebar-bg); border-right: 1px solid var(--border-color);
+        padding: 20px; overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px;
+    }
+    .main {
+        flex-grow: 1; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; position: relative; width: 1500px;
+    }
+    h2, h3 { margin: 0 0 10px 0; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+    .control-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; }
+    .control-row { display: flex; justify-content: space-between; align-items: center; }
+    input[type="number"], input[type="text"] { width: 70px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
+    input[type="range"] { flex-grow: 1; margin: 0 10px; }
+    input[type="color"] { border: none; width: 30px; height: 30px; padding: 0; cursor: pointer; }
+    button { padding: 8px 12px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    button:hover { background: #004494; }
+    .header-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    #chartTitleDisplay { font-size: 1.5em; font-weight: bold; margin: 0; }
+    canvas { background: white; border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; height: 100%; display: block; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+    th, td { border: 1px solid var(--border-color); padding: 5px; text-align: left; cursor: help; }
+    th { background: #f9f9f9; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="control-group">
+        <h3>1. General</h3>
+        <div class="control-row"><label>Chart Title:</label> <input type="text" id="chartTitle" value="Market Model"></div>
+        <div id="eqDemand" style="font-family: monospace; font-size: 0.9em; font-weight: bold; margin-top: 5px;"></div>
+        <div id="eqSupply" style="font-family: monospace; font-size: 0.9em; font-weight: bold;"></div>
+    </div>
+
+    <div class="control-group">
+        <h3>2. Scaling</h3>
+        <div class="control-row"><label>Max Q:</label> <input type="number" id="manualMaxQ" placeholder="Auto"></div>
+        <div class="control-row"><label>Max P:</label> <input type="number" id="manualMaxP" placeholder="Auto"></div>
+        <div class="control-row"><label>Tick Step (Auto if blank):</label> <input type="number" id="tickStep" placeholder="Auto"></div>
+    </div>
+
+    <div class="control-group">
+        <h3>3. Demand ($Q_d = A - BP$)</h3>
+        <div class="control-row"><label>A:</label> <input type="range" id="demA" min="0" max="100" step="1" value="50"> <input type="number" id="demANum" value="50"></div>
+        <div class="control-row"><label>B:</label> <input type="range" id="demB" min="0.05" max="10" step="0.05" value="2"> <input type="number" id="demBNum" value="2"></div>
+    </div>
+
+    <div class="control-group">
+        <h3>4. Supply ($Q_s = C + EP$)</h3>
+        <div class="control-row"><label>C:</label> <input type="range" id="supC" min="0" max="100" step="1" value="0"> <input type="number" id="supCNum" value="0"></div>
+        <div class="control-row"><label>E:</label> <input type="range" id="supE" min="0.05" max="10" step="0.05" value="2"> <input type="number" id="supENum" value="2"></div>
+    </div>
+
+    <div class="control-group">
+        <h3>5. Intervention</h3>
+        <div class="control-row"><label>Tax (T):</label> <input type="range" id="taxT" min="0" max="200" step="1" value="0"> <input type="number" id="taxTNum" value="0"></div>
+        <div class="control-row"><label>Price Control (Pc):</label> <input type="range" id="pricePc" min="0" max="200" step="1" value="0"> <input type="number" id="pricePcNum" value="0"></div>
+        <div class="control-row" style="margin-top:5px;"><label><input type="checkbox" id="showShading" checked> Show Shading</label></div>
+        <div class="control-row"><label><input type="checkbox" id="showShift"> Show Shifted Curve</label></div>
+    </div>
+
+    <div class="control-group">
+        <h3>6. Style</h3>
+        <div class="control-row"><label>Demand</label><input type="color" id="colDem" value="#012169"><label>Supply</label><input type="color" id="colSup" value="#A89968"></div>
+        <div class="control-row"><label>Dashes</label><input type="color" id="colDash" value="#A4AFB9"><label>TR</label><input type="color" id="colTR" value="#ADD8E6"></div>
+        <div class="control-row"><label>DWL</label><input type="color" id="colDWL" value="#D3D3D3"></div>
+        <div class="control-row" style="margin-top:10px;"><button id="btnResetGraph">Reset Graph</button> <button id="btnResetStyle">Reset Style</button></div>
+    </div>
+
+    <div class="control-group">
+        <h3>7. Statistics</h3>
+        <table>
+            <tr><th title="Equilibrium Price">$P^*$</th><td id="statPStar">0</td><th title="Equilibrium Quantity">$Q^*$</th><td id="statQStar">0</td></tr>
+            <tr><th title="Buyer Price (with tax/controls)">$P_b$</th><td id="statPb">0</td><th title="Seller Price (with tax/controls)">$P_s$</th><td id="statPs">0</td></tr>
+            <tr><th title="Tax Revenue">Tax Rev</th><td id="statTR">0</td><th title="Deadweight Loss">DWL</th><td id="statDWL">0</td></tr>
+            <tr><th title="Consumer Surplus">CS</th><td id="statCS">0</td><th title="Producer Surplus">PS</th><td id="statPS">0</td></tr>
+            <tr><th title="Price Control">Pc</th><td id="statPc">N/A</td><th title="Shortage or Surplus Gap">Gap</th><td id="statGap">N/A</td></tr>
+        </table>
+    </div>
+</div>
+
+<div class="main">
+    <div class="header-controls">
+        <h2 id="chartTitleDisplay">Market Model</h2>
+        <button id="btnDownload">Download PNG</button>
+    </div>
+    <div style="flex-grow: 1; position: relative;" id="canvasContainer">
+        <canvas id="marketCanvas"></canvas>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('marketCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvasContainer');
+
+    let A, B, C, E, T, Pc;
+    let renderRequested = false;
+
+    const els = {
+        title: document.getElementById('chartTitle'),
+        titleDisplay: document.getElementById('chartTitleDisplay'),
+        eqDemand: document.getElementById('eqDemand'), eqSupply: document.getElementById('eqSupply'),
+        maxQ: document.getElementById('manualMaxQ'), maxP: document.getElementById('manualMaxP'),
+        tickStep: document.getElementById('tickStep'),
+        demA: document.getElementById('demA'), demANum: document.getElementById('demANum'),
+        demB: document.getElementById('demB'), demBNum: document.getElementById('demBNum'),
+        supC: document.getElementById('supC'), supCNum: document.getElementById('supCNum'),
+        supE: document.getElementById('supE'), supENum: document.getElementById('supENum'),
+        taxT: document.getElementById('taxT'), taxTNum: document.getElementById('taxTNum'),
+        pricePc: document.getElementById('pricePc'), pricePcNum: document.getElementById('pricePcNum'),
+        showShading: document.getElementById('showShading'), showShift: document.getElementById('showShift'),
+        colDem: document.getElementById('colDem'), colSup: document.getElementById('colSup'),
+        colDash: document.getElementById('colDash'), colTR: document.getElementById('colTR'), colDWL: document.getElementById('colDWL'),
+        statPStar: document.getElementById('statPStar'), statQStar: document.getElementById('statQStar'),
+        statPb: document.getElementById('statPb'), statPs: document.getElementById('statPs'),
+        statTR: document.getElementById('statTR'), statDWL: document.getElementById('statDWL'),
+        statCS: document.getElementById('statCS'), statPS: document.getElementById('statPS'),
+        statPc: document.getElementById('statPc'), statGap: document.getElementById('statGap')
+    };
+
+    function sync(slider, num) {
+        slider.addEventListener('input', () => { num.value = slider.value; requestRender(); });
+        num.addEventListener('input', () => { slider.value = num.value; requestRender(); });
+    }
+
+    sync(els.demA, els.demANum); sync(els.demB, els.demBNum);
+    sync(els.supC, els.supCNum); sync(els.supE, els.supENum);
+    sync(els.taxT, els.taxTNum); sync(els.pricePc, els.pricePcNum);
+
+    [els.title, els.maxQ, els.maxP, els.tickStep, els.showShading, els.showShift, els.colDem, els.colSup, els.colDash, els.colTR, els.colDWL].forEach(el => {
+        el.addEventListener('input', requestRender);
+    });
+
+    els.title.addEventListener('input', () => { els.titleDisplay.textContent = els.title.value; });
+
+    document.getElementById('btnResetGraph').addEventListener('click', () => {
+        els.demA.value = els.demANum.value = 50; els.demB.value = els.demBNum.value = 2;
+        els.supC.value = els.supCNum.value = 0; els.supE.value = els.supENum.value = 2;
+        els.taxT.value = els.taxTNum.value = 0; els.pricePc.value = els.pricePcNum.value = 0;
+        els.maxQ.value = ''; els.maxP.value = ''; els.tickStep.value = '';
+        requestRender();
+    });
+
+    document.getElementById('btnResetStyle').addEventListener('click', () => {
+        els.colDem.value = '#012169'; els.colSup.value = '#A89968'; els.colDash.value = '#A4AFB9';
+        els.colTR.value = '#ADD8E6'; els.colDWL.value = '#D3D3D3';
+        els.showShading.checked = true; els.showShift.checked = false;
+        requestRender();
+    });
+
+    document.getElementById('btnDownload').addEventListener('click', () => {
+        const dpr = window.devicePixelRatio;
+        const extraHeight = 150 * dpr; 
+        
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height + extraHeight;
+        const tCtx = tempCanvas.getContext('2d');
+
+        tCtx.fillStyle = '#ffffff';
+        tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        tCtx.drawImage(canvas, 0, 0);
+
+        tCtx.strokeStyle = '#cccccc';
+        tCtx.lineWidth = 1 * dpr;
+        tCtx.setLineDash([5 * dpr, 5 * dpr]);
+        tCtx.beginPath();
+        tCtx.moveTo(0, canvas.height);
+        tCtx.lineTo(tempCanvas.width, canvas.height);
+        tCtx.stroke();
+        tCtx.setLineDash([]);
+
+        tCtx.fillStyle = '#000000';
+        tCtx.font = `${16 * dpr}px sans-serif`;
+        tCtx.textAlign = 'left';
+        tCtx.textBaseline = 'top';
+
+        const padX = 60 * dpr;
+        const startY = canvas.height + 20 * dpr;
+        const lineH = 25 * dpr;
+
+        tCtx.fillText(`Demand: Qd = ${A} - ${B}P`, padX, startY);
+        tCtx.fillText(`Supply: Qs = ${C} + ${E}P`, padX, startY + lineH);
+        if (T > 0) tCtx.fillText(`Tax (T) = ${T}`, padX, startY + lineH * 2);
+
+        const col2X = padX + 250 * dpr;
+        tCtx.fillText(`P*: ${els.statPStar.textContent}    Q*: ${els.statQStar.textContent}`, col2X, startY);
+        tCtx.fillText(`Pb: ${els.statPb.textContent}    Ps: ${els.statPs.textContent}`, col2X, startY + lineH);
+        tCtx.fillText(`Pc: ${els.statPc.textContent}`, col2X, startY + lineH * 2);
+
+        const col3X = col2X + 250 * dpr;
+        tCtx.fillText(`CS: ${els.statCS.textContent}    PS: ${els.statPS.textContent}`, col3X, startY);
+        tCtx.fillText(`Tax Rev: ${els.statTR.textContent}    DWL: ${els.statDWL.textContent}`, col3X, startY + lineH);
+        tCtx.fillText(`Gap: ${els.statGap.textContent}`, col3X, startY + lineH * 2);
+
+        const link = document.createElement('a');
+        link.download = (els.title.value || 'market') + '.png';
+        link.href = tempCanvas.toDataURL('image/png');
+        link.click();
+    });
+
+    function resizeCanvas() {
+        const rect = container.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        requestRender();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function requestRender() {
+        if (!renderRequested) {
+            renderRequested = true;
+            requestAnimationFrame(render);
+        }
+    }
+
+    function hexToRgba(hex, alpha) {
+        let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function render() {
+        renderRequested = false;
+        
+        A = parseFloat(els.demANum.value) || 0; 
+        B = parseFloat(els.demBNum.value) || 0;
+        C = parseFloat(els.supCNum.value) || 0; 
+        E = parseFloat(els.supENum.value) || 0;
+        T = parseFloat(els.taxTNum.value) || 0;
+        Pc = parseFloat(els.pricePcNum.value) || 0;
+
+        els.eqDemand.textContent = `Demand: Qd = ${A} - ${B}P`;
+        els.eqSupply.textContent = `Supply: Qs = ${C} + ${E}P`;
+
+        // Mathematical Engine
+        let PStar = (A - C) / (B + E);
+        let QStar = A - B * PStar;
+        
+        let Ps, Pb, Qt, Qd, Qs, gap;
+
+        if (Pc > 0) {
+            Pb = Pc;
+            Ps = Pc - T;
+            Qd = A - B * Pb;
+            Qs = C + E * Ps;
+            Qt = Math.max(0, Math.min(Qd, Qs));
+            gap = Qd - Qs;
+        } else {
+            Ps = (A - C - B * T) / (B + E);
+            Pb = Ps + T;
+            Qt = C + E * Ps;
+            Qd = Qt;
+            Qs = Qt;
+            gap = 0;
+        }
+
+        if (Qt < 0) Qt = 0;
+
+        // Stat Calculations (Trapezoid Logic for Constraints)
+        let CS = 0;
+        if (Qt > 0 && A/B > Pb) {
+            let pDemandAtQt = (A - Qt) / B;
+            CS = 0.5 * Qt * ((A/B - Pb) + Math.max(0, pDemandAtQt - Pb));
+        }
+
+        let PS = 0;
+        if (Qt > 0) {
+            let supYInt = -C/E;
+            let pSupplyAtQt = (Qt - C) / E;
+            if (supYInt >= 0) {
+                PS = 0.5 * Qt * ((Ps - supYInt) + Math.max(0, Ps - pSupplyAtQt));
+            } else {
+                let qStart = C;
+                if (Qt > qStart) {
+                    PS = 0.5 * (Qt - qStart) * (Ps + Math.max(0, Ps - pSupplyAtQt));
+                }
+            }
+        }
+        
+        let TR = T * Qt;
+        
+        let DWL = 0;
+        if (Qt < QStar) {
+            let pDemandAtQt = (A - Qt) / B;
+            let pSupplyAtQt = (Qt - C) / E;
+            DWL = 0.5 * (QStar - Qt) * (pDemandAtQt - pSupplyAtQt);
+        }
+
+        // Table Updates
+        els.statPStar.textContent = PStar.toFixed(2); els.statQStar.textContent = QStar.toFixed(2);
+        els.statPb.textContent = Pb.toFixed(2); els.statPs.textContent = Ps.toFixed(2);
+        els.statTR.textContent = TR.toFixed(2); els.statDWL.textContent = DWL.toFixed(2);
+        els.statCS.textContent = CS.toFixed(2); els.statPS.textContent = PS.toFixed(2);
+
+        els.statPc.textContent = Pc > 0 ? Pc.toFixed(2) : "N/A";
+        if (Pc > 0) {
+            if (gap > 0) els.statGap.textContent = `Shortage: ${gap.toFixed(2)}`;
+            else if (gap < 0) els.statGap.textContent = `Surplus: ${Math.abs(gap).toFixed(2)}`;
+            else els.statGap.textContent = "0.00";
+        } else {
+            els.statGap.textContent = "N/A";
+        }
+
+        // Canvas Setup
+        const w = canvas.width / window.devicePixelRatio;
+        const h = canvas.height / window.devicePixelRatio;
+        ctx.clearRect(0, 0, w, h);
+
+        const padLeft = 60, padBottom = 50, padTop = 40, padRight = 30;
+        const plotW = w - padLeft - padRight;
+        const plotH = h - padTop - padBottom;
+
+        // Scaling Engine
+        let maxQ = parseFloat(els.maxQ.value);
+        let maxP = parseFloat(els.maxP.value);
+
+        if (isNaN(maxQ) && isNaN(maxP)) {
+            let reqQ = 1.1 * A;
+            let reqP = 1.1 * (A/B);
+            
+            let testP = reqQ * (plotH / plotW);
+            if (testP >= reqP) {
+                maxQ = reqQ;
+                maxP = testP;
+            } else {
+                maxP = reqP;
+                maxQ = reqP * (plotW / plotH);
+            }
+        } else {
+            if (isNaN(maxQ)) maxQ = 1.1 * A;
+            if (isNaN(maxP)) maxP = 1.1 * (A/B);
+        }
+        
+        let tick = parseFloat(els.tickStep.value);
+        if (isNaN(tick) || tick <= 0) tick = maxQ / 10;
+        if (maxQ / tick > 100) tick = maxQ / 20;
+
+        const getX = (q) => padLeft + (q / maxQ) * plotW;
+        const getY = (p) => padTop + plotH - (p / maxP) * plotH;
+
+        // Render Axes
+        ctx.beginPath();
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 1;
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+
+        for (let q = 0; q <= maxQ; q += tick) {
+            let x = getX(q);
+            if(x > w - padRight + 1) continue;
+            ctx.moveTo(x, padTop); ctx.lineTo(x, padTop + plotH);
+            ctx.fillText(q.toFixed(0), x, padTop + plotH + 5);
+        }
+
+        let pTick = tick;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let p = 0; p <= maxP; p += pTick) {
+            let y = getY(p);
+            if(y < padTop - 1) continue;
+            ctx.moveTo(padLeft, y); ctx.lineTo(padLeft + plotW, y);
+            ctx.fillText(p.toFixed(1), padLeft - 5, y);
+        }
+        ctx.stroke();
+
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText("Quantity (Q)", padLeft + plotW/2, h - 15);
+        ctx.save();
+        ctx.translate(15, padTop + plotH/2);
+        ctx.rotate(-Math.PI/2);
+        ctx.fillText("Price (P)", 0, 0);
+        ctx.restore();
+
+        ctx.font = 'bold 18px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(els.title.value, padLeft + plotW/2, 20);
+
+        // Geometries
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(padLeft, padTop, plotW, plotH);
+        ctx.clip();
+
+        const demYInt = A/B;
+        const supYInt = -C/E; 
+
+        if (els.showShading.checked) {
+            // CS
+            ctx.fillStyle = hexToRgba(els.colDem.value, 0.15);
+            ctx.beginPath();
+            ctx.moveTo(getX(0), getY(demYInt));
+            ctx.lineTo(getX(0), getY(Pb));
+            ctx.lineTo(getX(Qt), getY(Pb));
+            ctx.lineTo(getX(Qt), getY((A - Qt)/B));
+            ctx.fill();
+
+            // PS
+            ctx.fillStyle = hexToRgba(els.colSup.value, 0.15);
+            ctx.beginPath();
+            if (supYInt >= 0) {
+                ctx.moveTo(getX(0), getY(supYInt));
+                ctx.lineTo(getX(Qt), getY((Qt - C)/E));
+                ctx.lineTo(getX(Qt), getY(Ps));
+                ctx.lineTo(getX(0), getY(Ps));
+            } else {
+                ctx.moveTo(getX(C), getY(0));
+                ctx.lineTo(getX(Qt), getY((Qt - C)/E));
+                ctx.lineTo(getX(Qt), getY(Ps));
+                ctx.lineTo(getX(0), getY(Ps));
+                ctx.lineTo(getX(0), getY(0));
+            }
+            ctx.fill();
+
+            if (T > 0) {
+                ctx.fillStyle = hexToRgba(els.colTR.value, 0.45);
+                ctx.fillRect(getX(0), getY(Pb), getX(Qt) - getX(0), getY(Ps) - getY(Pb));
+            }
+
+            if (Qt < QStar) {
+                ctx.fillStyle = hexToRgba(els.colDWL.value, 0.45);
+                ctx.beginPath();
+                ctx.moveTo(getX(Qt), getY((A - Qt)/B));
+                ctx.lineTo(getX(QStar), getY(PStar));
+                ctx.lineTo(getX(Qt), getY((Qt - C)/E));
+                ctx.fill();
+            }
+        }
+
+        // Render Price Control Line
+        if (Pc > 0) {
+            ctx.strokeStyle = '#d9534f';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(getX(0), getY(Pc));
+            ctx.lineTo(getX(maxQ), getY(Pc));
+            ctx.stroke();
+
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            
+            ctx.fillStyle = '#d9534f';
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 12px sans-serif';
+
+            // Qd intersection
+            if (Qd > 0 && Qd <= maxQ) {
+                ctx.beginPath();
+                ctx.moveTo(getX(Qd), getY(Pc));
+                ctx.lineTo(getX(Qd), getY(0));
+                ctx.stroke();
+                ctx.beginPath(); ctx.arc(getX(Qd), getY(Pc), 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillText("Qd", getX(Qd), getY(0) - 10);
+            }
+
+            // Qs intersection (on shifted supply if taxed)
+            if (Qs > 0 && Qs <= maxQ) {
+                ctx.beginPath();
+                ctx.moveTo(getX(Qs), getY(Pc));
+                ctx.lineTo(getX(Qs), getY(0));
+                ctx.stroke();
+                ctx.beginPath(); ctx.arc(getX(Qs), getY(Pc), 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillText("Qs", getX(Qs), getY(0) - 10);
+            }
+            ctx.setLineDash([]);
+        }
+
+        // Curves
+        ctx.strokeStyle = els.colSup.value;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        let sP1 = 0, sQ1 = C;
+        if (sQ1 < 0) { sP1 = -C/E; sQ1 = 0; }
+        ctx.moveTo(getX(sQ1), getY(sP1));
+        ctx.lineTo(getX(C + E * 5000), getY(5000));
+        ctx.stroke();
+
+        if (els.showShift.checked && T > 0) {
+            ctx.strokeStyle = hexToRgba(els.colSup.value, 0.5);
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            let ssP1 = T, ssQ1 = C;
+            if (ssQ1 < 0) { ssP1 = (-C/E) + T; ssQ1 = 0; }
+            ctx.moveTo(getX(ssQ1), getY(ssP1));
+            ctx.lineTo(getX(C + E * 5000), getY(5000 + T));
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        ctx.strokeStyle = els.colDem.value;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(getX(0), getY(demYInt));
+        ctx.lineTo(getX(A), getY(0));
+        ctx.stroke();
+
+        // Dashes
+        ctx.strokeStyle = els.colDash.value;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        
+        const drawDash = (q, p) => {
+            ctx.beginPath();
+            ctx.moveTo(getX(0), getY(p)); ctx.lineTo(getX(q), getY(p)); ctx.lineTo(getX(q), getY(0));
+            ctx.stroke();
+            
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(getX(q), getY(p), 4, 0, Math.PI*2); ctx.fill();
+        };
+
+        if (Pc === 0) {
+            if (T > 0) { drawDash(Qt, Pb); drawDash(Qt, Ps); } 
+            else { drawDash(QStar, PStar); }
+        }
+
+        ctx.restore(); 
+
+        // Labels
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'left';
+        
+        let dX = Math.min(A, maxQ);
+        let dY = Math.max(0, (A - dX)/B);
+        ctx.fillStyle = els.colDem.value;
+        ctx.fillText("D", getX(dX) + 5, getY(dY) - 5);
+
+        let sY = maxP;
+        let sX = C + E * sY;
+        if (sX > maxQ) { sX = maxQ; sY = (sX - C)/E; }
+        ctx.fillStyle = els.colSup.value;
+        ctx.fillText("S", getX(sX) + 5, getY(sY) + 15);
+
+        if (els.showShift.checked && T > 0) {
+            let ssY = maxP;
+            let ssX = C + E * (ssY - T);
+            if (ssX > maxQ) { ssX = maxQ; ssY = (ssX - C)/E + T; }
+            ctx.fillStyle = hexToRgba(els.colSup.value, 0.8);
+            ctx.fillText("S1", getX(ssX) + 5, getY(ssY) + 15);
+        }
+
+        if (Pc > 0 && Pc <= maxP) {
+            ctx.fillStyle = '#d9534f';
+            ctx.textAlign = 'right';
+            ctx.fillText("Pc", getX(maxQ) - 10, getY(Pc) - 10);
+        }
+    }
+
+    setTimeout(resizeCanvas, 100);
+</script>
+</body>
+</html>

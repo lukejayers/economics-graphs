@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Firm Profit Maximization Model</title>
+<style>
+    :root {
+        --demand-color: #012169;
+        --mr-color: #0056b3;
+        --mc-color: #d9534f;
+        --atc-color: #5cb85c;
+        --avc-color: #f0ad4e;
+        --dash-color: #A4AFB9;
+        --bg-color: #f4f4f9;
+        --sidebar-bg: #ffffff;
+        --border-color: #ddd;
+    }
+    body, html {
+        margin: 0; padding: 0; height: 100%; font-family: system-ui, -apple-system, sans-serif;
+        display: flex; background: var(--bg-color); color: #333; overflow: hidden;
+    }
+    .sidebar {
+        width: 320px; min-width: 320px; background: var(--sidebar-bg); border-right: 1px solid var(--border-color);
+        padding: 20px; overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 15px;
+    }
+    .main {
+        flex-grow: 1; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; position: relative; width: 1500px;
+    }
+    h2, h3 { margin: 0 0 10px 0; font-size: 1.1em; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; }
+    .control-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px; }
+    .control-row { display: flex; justify-content: space-between; align-items: center; }
+    input[type="number"], input[type="text"], select { width: 80px; padding: 4px; border: 1px solid #ccc; border-radius: 4px; }
+    select { width: 100%; margin-bottom: 10px; padding: 6px; }
+    input[type="range"] { flex-grow: 1; margin: 0 10px; }
+    input[type="color"] { border: none; width: 30px; height: 30px; padding: 0; cursor: pointer; }
+    button { padding: 8px 12px; background: #0056b3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    button:hover { background: #004494; }
+    .header-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    #chartTitleDisplay { font-size: 1.5em; font-weight: bold; margin: 0; }
+    canvas { background: white; border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 100%; height: 100%; display: block; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+    th, td { border: 1px solid var(--border-color); padding: 5px; text-align: left; cursor: help; }
+    th { background: #f9f9f9; }
+    .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="control-group">
+        <h3>1. General</h3>
+        <input type="text" id="chartTitle" value="Firm Profit Maximization" style="width: 100%; margin-bottom: 10px; box-sizing: border-box;">
+        <select id="marketType">
+            <option value="PC">Perfect Competition</option>
+            <option value="MONO">Monopoly</option>
+        </select>
+    </div>
+
+    <div class="control-group">
+        <h3>2. Scaling</h3>
+        <div class="control-row"><label>Max Q:</label> <input type="number" id="manualMaxQ" placeholder="Auto"></div>
+        <div class="control-row"><label>Max P:</label> <input type="number" id="manualMaxP" placeholder="Auto"></div>
+    </div>
+
+    <div class="control-group">
+        <h3>3. Cost Structure</h3>
+        <div class="control-row"><label>Fixed Cost (FC):</label> <input type="range" id="costFC" min="0" max="500" step="10" value="150"> <input type="number" id="costFCNum" value="150"></div>
+        <div class="control-row"><label>VC Multiplier:</label> <input type="range" id="costK" min="0.5" max="5.0" step="0.1" value="2.0"> <input type="number" id="costKNum" value="2.0"></div>
+    </div>
+
+    <div class="control-group" id="grpPC">
+        <h3>4. Revenue (Perfect Competition)</h3>
+        <div class="control-row"><label>Market Price (P):</label> <input type="range" id="priceP" min="0" max="150" step="1" value="40"> <input type="number" id="pricePNum" value="40"></div>
+    </div>
+
+    <div class="control-group hidden" id="grpMono">
+        <h3>4. Revenue (Monopoly)</h3>
+        <div class="control-row"><label>Demand Intercept:</label> <input type="range" id="demA" min="10" max="250" step="5" value="120"> <input type="number" id="demANum" value="120"></div>
+        <div class="control-row"><label>Demand Slope:</label> <input type="range" id="demB" min="0.1" max="10" step="0.1" value="2.0"> <input type="number" id="demBNum" value="2.0"></div>
+    </div>
+
+    <div class="control-group">
+        <h3>5. Options & Style</h3>
+        <div class="control-row"><label><input type="checkbox" id="showShading" checked> Show Profit/Loss Shading</label></div>
+        <div class="control-row" style="margin-top: 10px;">
+            <label>MC</label><input type="color" id="colMC" value="#d9534f">
+            <label>ATC</label><input type="color" id="colATC" value="#5cb85c">
+            <label>AVC</label><input type="color" id="colAVC" value="#f0ad4e">
+        </div>
+        <div class="control-row" style="margin-top: 5px;">
+            <label>Demand</label><input type="color" id="colDem" value="#012169">
+            <label>MR</label><input type="color" id="colMR" value="#0056b3">
+        </div>
+    </div>
+
+    <div class="control-group">
+        <h3>6. Statistics</h3>
+        <table>
+            <tr><th colspan="2" style="text-align: center; background: #e9ecef;" id="statStatus">Producing</th></tr>
+            <tr><th title="Profit Maximizing Quantity">$Q^*$</th><td id="statQ">0</td><th title="Market Price">$P^*$</th><td id="statP">0</td></tr>
+            <tr><th title="Average Total Cost">ATC</th><td id="statATC">0</td><th title="Average Variable Cost">AVC</th><td id="statAVC">0</td></tr>
+            <tr><th title="Total Revenue">TR</th><td id="statTR">0</td><th title="Total Cost">TC</th><td id="statTC">0</td></tr>
+            <tr><th colspan="2" style="font-weight: bold;">Economic Profit</th><td colspan="2" id="statProfit" style="font-weight: bold;">0</td></tr>
+        </table>
+    </div>
+</div>
+
+<div class="main">
+    <div class="header-controls">
+        <h2 id="chartTitleDisplay">Firm Profit Maximization</h2>
+        <button id="btnDownload">Download PNG</button>
+    </div>
+    <div style="flex-grow: 1; position: relative;" id="canvasContainer">
+        <canvas id="marketCanvas"></canvas>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('marketCanvas');
+    const ctx = canvas.getContext('2d');
+    const container = document.getElementById('canvasContainer');
+    let renderRequested = false;
+
+    const els = {
+        title: document.getElementById('chartTitle'),
+        titleDisplay: document.getElementById('chartTitleDisplay'),
+        marketType: document.getElementById('marketType'),
+        grpPC: document.getElementById('grpPC'), grpMono: document.getElementById('grpMono'),
+        maxQ: document.getElementById('manualMaxQ'), maxP: document.getElementById('manualMaxP'),
+        costFC: document.getElementById('costFC'), costFCNum: document.getElementById('costFCNum'),
+        costK: document.getElementById('costK'), costKNum: document.getElementById('costKNum'),
+        priceP: document.getElementById('priceP'), pricePNum: document.getElementById('pricePNum'),
+        demA: document.getElementById('demA'), demANum: document.getElementById('demANum'),
+        demB: document.getElementById('demB'), demBNum: document.getElementById('demBNum'),
+        showShading: document.getElementById('showShading'),
+        colDem: document.getElementById('colDem'), colMR: document.getElementById('colMR'),
+        colMC: document.getElementById('colMC'), colATC: document.getElementById('colATC'), colAVC: document.getElementById('colAVC'),
+        statStatus: document.getElementById('statStatus'),
+        statQ: document.getElementById('statQ'), statP: document.getElementById('statP'),
+        statATC: document.getElementById('statATC'), statAVC: document.getElementById('statAVC'),
+        statTR: document.getElementById('statTR'), statTC: document.getElementById('statTC'),
+        statProfit: document.getElementById('statProfit')
+    };
+
+    function sync(slider, num) {
+        slider.addEventListener('input', () => { num.value = slider.value; requestRender(); });
+        num.addEventListener('input', () => { slider.value = num.value; requestRender(); });
+    }
+
+    sync(els.costFC, els.costFCNum); sync(els.costK, els.costKNum);
+    sync(els.priceP, els.pricePNum); sync(els.demA, els.demANum); sync(els.demB, els.demBNum);
+
+    [els.title, els.marketType, els.maxQ, els.maxP, els.showShading, els.colDem, els.colMR, els.colMC, els.colATC, els.colAVC].forEach(el => {
+        el.addEventListener('input', requestRender);
+        el.addEventListener('change', requestRender);
+    });
+
+    els.title.addEventListener('input', () => { els.titleDisplay.textContent = els.title.value; });
+
+    els.marketType.addEventListener('change', () => {
+        if (els.marketType.value === 'PC') {
+            els.grpPC.classList.remove('hidden');
+            els.grpMono.classList.add('hidden');
+        } else {
+            els.grpPC.classList.add('hidden');
+            els.grpMono.classList.remove('hidden');
+        }
+    });
+
+    // Cost Functions
+    const calcMC = (Q, K) => K * (0.1 * Q * Q - 2 * Q + 20);
+    const calcAVC = (Q, K) => K * ((1/30) * Q * Q - Q + 20);
+    const calcATC = (Q, K, FC) => (Q === 0) ? Infinity : (FC / Q) + calcAVC(Q, K);
+    const calcTC = (Q, K, FC) => FC + K * ((1/30) * Math.pow(Q, 3) - Q * Q + 20 * Q);
+
+    document.getElementById('btnDownload').addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = (els.title.value || 'firm_model') + '.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+
+    function resizeCanvas() {
+        const rect = container.getBoundingClientRect();
+        canvas.width = rect.width * window.devicePixelRatio;
+        canvas.height = rect.height * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        requestRender();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function requestRender() {
+        if (!renderRequested) {
+            renderRequested = true;
+            requestAnimationFrame(render);
+        }
+    }
+
+    function hexToRgba(hex, alpha) {
+        let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function render() {
+        renderRequested = false;
+        
+        const isPC = els.marketType.value === 'PC';
+        const FC = parseFloat(els.costFCNum.value) || 0;
+        const K = parseFloat(els.costKNum.value) || 1;
+        
+        const P_market = parseFloat(els.pricePNum.value) || 0;
+        const A = parseFloat(els.demANum.value) || 0;
+        const B = parseFloat(els.demBNum.value) || 0;
+
+        // Find Q* (MR = MC)
+        let A_quad = 0.1 * K;
+        let B_quad = isPC ? -2 * K : (2 * B - 2 * K);
+        let C_quad = isPC ? (20 * K - P_market) : (20 * K - A);
+        
+        let discriminant = (B_quad * B_quad) - (4 * A_quad * C_quad);
+        let QStar = 0;
+        let PStar = 0;
+
+        if (discriminant >= 0) {
+            let root1 = (-B_quad + Math.sqrt(discriminant)) / (2 * A_quad);
+            let root2 = (-B_quad - Math.sqrt(discriminant)) / (2 * A_quad);
+            QStar = Math.max(root1, root2); 
+            if (QStar < 0) QStar = 0;
+        }
+
+        if (QStar > 0) {
+            PStar = isPC ? P_market : (A - B * QStar);
+        }
+
+        let currentAVC = calcAVC(QStar, K);
+        let currentATC = calcATC(QStar, K, FC);
+        let isShutdown = false;
+
+        if (QStar === 0 || PStar < currentAVC) {
+            isShutdown = true;
+            QStar = 0;
+            PStar = isPC ? P_market : 0; 
+            currentAVC = 0;
+            currentATC = 0;
+        }
+
+        let TR = isShutdown ? 0 : PStar * QStar;
+        let TC = isShutdown ? FC : calcTC(QStar, K, FC);
+        let Profit = TR - TC;
+
+        // Update UI Table
+        els.statQ.textContent = QStar.toFixed(2);
+        els.statP.textContent = isShutdown && !isPC ? "N/A" : PStar.toFixed(2);
+        els.statAVC.textContent = isShutdown ? "N/A" : currentAVC.toFixed(2);
+        els.statATC.textContent = isShutdown ? "N/A" : currentATC.toFixed(2);
+        els.statTR.textContent = TR.toFixed(2);
+        els.statTC.textContent = TC.toFixed(2);
+        els.statProfit.textContent = Profit.toFixed(2);
+
+        if (isShutdown) {
+            els.statStatus.textContent = "Shut Down (P < AVC)";
+            els.statStatus.style.background = "#f8d7da";
+            els.statStatus.style.color = "#721c24";
+        } else if (Profit > 0) {
+            els.statStatus.textContent = "Economic Profit";
+            els.statStatus.style.background = "#d4edda";
+            els.statStatus.style.color = "#155724";
+        } else if (Profit < 0) {
+            els.statStatus.textContent = "Economic Loss";
+            els.statStatus.style.background = "#fff3cd";
+            els.statStatus.style.color = "#856404";
+        } else {
+            els.statStatus.textContent = "Normal Profit (Break Even)";
+            els.statStatus.style.background = "#e2e3e5";
+            els.statStatus.style.color = "#383d41";
+        }
+        els.statProfit.style.color = Profit >= 0 ? "#155724" : "#721c24";
+
+        // Canvas Rendering
+        const w = canvas.width / window.devicePixelRatio;
+        const h = canvas.height / window.devicePixelRatio;
+        ctx.clearRect(0, 0, w, h);
+
+        const padLeft = 60, padBottom = 50, padTop = 40, padRight = 30;
+        const plotW = w - padLeft - padRight;
+        const plotH = h - padTop - padBottom;
+
+        let maxQ = parseFloat(els.maxQ.value) || Math.max(30, QStar * 1.5);
+        let maxP = parseFloat(els.maxP.value);
+        if (isNaN(maxP)) {
+            let pCompare = isPC ? P_market : A;
+            maxP = Math.max(50, pCompare * 1.2, currentATC * 1.5);
+        }
+
+        let tick = maxQ / 10;
+        const getX = (q) => padLeft + (q / maxQ) * plotW;
+        const getY = (p) => padTop + plotH - (p / maxP) * plotH;
+
+        ctx.beginPath();
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 1;
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = '#333';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+
+        for (let q = 0; q <= maxQ; q += tick) {
+            let x = getX(q);
+            if (x > w - padRight + 1) continue;
+            ctx.moveTo(x, padTop); ctx.lineTo(x, padTop + plotH);
+            ctx.fillText(q.toFixed(0), x, padTop + plotH + 5);
+        }
+
+        let pTick = maxP / 10;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let p = 0; p <= maxP; p += pTick) {
+            let y = getY(p);
+            if (y < padTop - 1) continue;
+            ctx.moveTo(padLeft, y); ctx.lineTo(padLeft + plotW, y);
+            ctx.fillText(p.toFixed(1), padLeft - 5, y);
+        }
+        ctx.stroke();
+
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText("Quantity (Q)", padLeft + plotW/2, h - 15);
+        ctx.save();
+        ctx.translate(15, padTop + plotH/2);
+        ctx.rotate(-Math.PI/2);
+        ctx.fillText("Price & Cost", 0, 0);
+        ctx.restore();
+
+        // Geometric Clipping
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(padLeft, padTop, plotW, plotH);
+        ctx.clip();
+
+        // Shading
+        if (els.showShading.checked && !isShutdown) {
+            if (Profit > 0) {
+                ctx.fillStyle = hexToRgba(els.colATC.value, 0.3); // Green tint
+                ctx.fillRect(getX(0), getY(PStar), getX(QStar) - getX(0), getY(currentATC) - getY(PStar));
+            } else if (Profit < 0) {
+                ctx.fillStyle = hexToRgba(els.colMC.value, 0.3); // Red tint
+                ctx.fillRect(getX(0), getY(currentATC), getX(QStar) - getX(0), getY(PStar) - getY(currentATC));
+            }
+        }
+
+        // Curve Drawer Helper
+        const drawCurve = (fn, color, width, dash = []) => {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.setLineDash(dash);
+            ctx.beginPath();
+            let started = false;
+            for (let q = 0.1; q <= maxQ * 1.05; q += maxQ / 200) {
+                let p = fn(q);
+                if (p > maxP * 3) continue; 
+                if (!started) { ctx.moveTo(getX(q), getY(p)); started = true; } 
+                else { ctx.lineTo(getX(q), getY(p)); }
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+        };
+
+        // Draw Cost Curves
+        drawCurve((q) => calcATC(q, K, FC), els.colATC.value, 3);
+        drawCurve((q) => calcAVC(q, K), els.colAVC.value, 2);
+        drawCurve((q) => calcMC(q, K), els.colMC.value, 3);
+
+        // Draw Revenue Curves
+        if (isPC) {
+            drawCurve((q) => P_market, els.colDem.value, 3);
+        } else {
+            drawCurve((q) => A - B * q, els.colDem.value, 3);
+            drawCurve((q) => A - 2 * B * q, els.colMR.value, 3);
+        }
+
+        // Dashed lines for Q* and P*
+        if (!isShutdown) {
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            
+            ctx.beginPath();
+            ctx.moveTo(getX(0), getY(PStar)); ctx.lineTo(getX(QStar), getY(PStar)); ctx.lineTo(getX(QStar), getY(0));
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(getX(0), getY(currentATC)); ctx.lineTo(getX(QStar), getY(currentATC));
+            ctx.stroke();
+
+            ctx.fillStyle = '#000';
+            ctx.beginPath(); ctx.arc(getX(QStar), getY(calcMC(QStar, K)), 5, 0, Math.PI*2); ctx.fill();
+            ctx.setLineDash([]);
+        }
+
+        ctx.restore(); // End Clip
+
+        // Labels
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'left';
+
+        // Cost Labels (drawn at maxQ)
+        let endMC = calcMC(maxQ, K);
+        if (endMC <= maxP) { ctx.fillStyle = els.colMC.value; ctx.fillText("MC", getX(maxQ) + 5, getY(endMC)); }
+        
+        let endATC = calcATC(maxQ, K, FC);
+        if (endATC <= maxP) { ctx.fillStyle = els.colATC.value; ctx.fillText("ATC", getX(maxQ) + 5, getY(endATC)); }
+        
+        let endAVC = calcAVC(maxQ, K);
+        if (endAVC <= maxP) { ctx.fillStyle = els.colAVC.value; ctx.fillText("AVC", getX(maxQ) + 5, getY(endAVC)); }
+
+        // Revenue Labels
+        if (isPC) {
+            if (P_market <= maxP) {
+                ctx.fillStyle = els.colDem.value;
+                ctx.fillText("D = MR = P", getX(maxQ) - 80, getY(P_market) - 10);
+            }
+        } else {
+            let dEndQ = Math.min(maxQ, A/B);
+            let dEndP = Math.max(0, A - B * dEndQ);
+            ctx.fillStyle = els.colDem.value;
+            ctx.fillText("D", getX(dEndQ) - 15, getY(dEndP) - 10);
+
+            let mrEndQ = Math.min(maxQ, A/(2*B));
+            let mrEndP = Math.max(0, A - 2 * B * mrEndQ);
+            ctx.fillStyle = els.colMR.value;
+            ctx.fillText("MR", getX(mrEndQ) - 25, getY(mrEndP) - 10);
+        }
+    }
+
+    setTimeout(resizeCanvas, 100);
+</script>
+</body>
+</html>
